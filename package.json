@@ -1,0 +1,40 @@
+{
+  "name": "@outfitter/actions",
+  "version": "0.1.0",
+  "description": "Zero-config CI workflows for Outfitter projects",
+  "type": "module",
+  "scripts": {
+    "detect": "bun run tools/detector.ts",
+    "risk": "bun run tools/risk-calculator.ts",
+    "validate": "bun run tools/validate-config.ts",
+    "generate-events": "bun run tools/generate-events.ts",
+    "cache-gen": "bun run tools/cache-key-gen.ts",
+    "webhook-server": "bun run tools/webhook-server.ts",
+    "test": "bun test",
+    "test:detector": "bun test tools/detector.test.ts",
+    "test:risk": "bun test tools/risk-calculator.test.ts",
+    "bench": "bun test --only bench",
+    "type-check": "tsc --noEmit",
+    "lint": "biome check .",
+    "format": "biome format --write ."
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "latest",
+    "typescript": "^5.6.3",
+    "zod": "^3.23.8"
+  },
+  "keywords": [
+    "ci",
+    "github-actions",
+    "workflow",
+    "belay",
+    "outfitter"
+  ],
+  "author": "Outfitter",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/outfitter-dev/actions"
+  }
+}

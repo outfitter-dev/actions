@@ -1,0 +1,234 @@
+name: 'Belay Detector'
+description: 'Auto-detect language, tools, and CI configuration'
+branding:
+  icon: 'search'
+  color: 'purple'
+
+inputs:
+  use_graphite:
+    description: 'Use Graphite CI Optimizer (true|false|auto)'
+    default: 'auto'
+  config_file:
+    description: 'Path to .ci.json config file'
+    default: '.ci.json'
+
+outputs:
+  provider:
+    description: 'CI provider (graphite|github)'
+  position:
+    description: 'Stack position (top|middle|bottom|unknown)'
+  tier:
+    description: 'CI tier (minimal|essential|full)'
+  is_agent:
+    description: 'Whether actor is an agent/bot'
+  install_cmd:
+    description: 'Install command for dependencies'
+  lint_cmd:
+    description: 'Lint command'
+  typecheck_cmd:
+    description: 'Type check command'
+  test_cmd:
+    description: 'Test command'
+  build_cmd:
+    description: 'Build command'
+  lang:
+    description: 'Primary language detected'
+  critical:
+    description: 'Whether critical paths were modified'
+  cache_key:
+    description: 'Cache key for dependencies'
+  cache_path:
+    description: 'Paths to cache'
+  workspaces:
+    description: 'Workspace configuration (JSON)'
+  is_monorepo:
+    description: 'Whether this is a monorepo'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup Bun
+      uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: latest
+
+    - name: Install Detection Tools
+      shell: bash
+      run: |
+        # Check if we're in the actions repo itself or using it externally
+        if [ -f "${{ github.action_path }}/../../package.json" ]; then
+          cd "${{ github.action_path }}/../.."
+          bun install --frozen-lockfile 2>/dev/null || bun install
+        else
+          # Using as external action, tools might not be available yet
+          echo "Running in external mode"
+        fi
+
+    - name: Run Detector
+      id: detect
+      shell: bash
+      env:
+        USE_GRAPHITE: ${{ inputs.use_graphite }}
+        GRAPHITE_TOKEN: ${{ env.GRAPHITE_TOKEN }}
+        CONFIG_FILE: ${{ inputs.config_file }}
+        GITHUB_CONTEXT: ${{ toJson(github) }}
+      run: |
+        # Try to use the TypeScript detector if available
+        DETECTOR_PATH="${{ github.action_path }}/../../tools/detector.ts"
+        
+        if [ -f "$DETECTOR_PATH" ]; then
+          echo "Using TypeScript detector"
+          OUTPUT=$(bun run "$DETECTOR_PATH" 2>/dev/null || echo '{}')
+          
+          # Parse the JSON output into GitHub outputs
+          echo "$OUTPUT" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' >> $GITHUB_OUTPUT
+        else
+          echo "Falling back to bash detector"
+          # Fallback bash implementation
+          source "${{ github.action_path }}/detect.sh"
+        fi
+
+    - name: Detect Critical Paths
+      id: paths
+      uses: dorny/paths-filter@v3
+      with:
+        filters: |
+          critical:
+            - 'packages/**/package.json'
+            - '**/schema.*'
+            - '.github/**'
+            - '**/Cargo.toml'
+            - '**/go.mod'
+            - '**/pyproject.toml'
+            - '**/pom.xml'
+            - '**/build.gradle*'
+
+    - name: Determine Position (GitHub)
+      if: steps.detect.outputs.provider == 'github' || steps.detect.outputs.provider == ''
+      shell: bash
+      run: |
+        # Determine stack position for GitHub provider
+        HEAD="${{ github.head_ref }}"
+        BASE="${{ github.event.pull_request.base.ref }}"
+        
+        if [[ -z "$BASE" ]]; then
+          echo "position=unknown" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        
+        # Check if base is default branch
+        DEFAULT_BRANCH=$(gh repo view --json defaultBranchRef --jq .defaultBranchRef.name 2>/dev/null || echo "main")
+        
+        if [[ "$BASE" == "$DEFAULT_BRANCH" ]]; then
+          echo "position=bottom" >> $GITHUB_OUTPUT
+        else
+          # Check if this PR has other PRs targeting it
+          CHILD_PRS=$(gh pr list --search "is:pr is:open base:$HEAD" --json number --jq 'length' 2>/dev/null || echo "0")
+          if [[ "$CHILD_PRS" -eq 0 ]]; then
+            echo "position=top" >> $GITHUB_OUTPUT
+          else
+            echo "position=middle" >> $GITHUB_OUTPUT
+          fi
+        fi
+
+    - name: Graphite Optimizer
+      if: steps.detect.outputs.provider == 'graphite'
+      id: graphite
+      uses: withgraphite/graphite-ci-action@main
+      continue-on-error: true
+      with:
+        graphite_token: ${{ env.GRAPHITE_TOKEN }}
+
+    - name: Calculate Risk Tier
+      id: tier
+      shell: bash
+      run: |
+        # Run the risk calculator if available
+        RISK_CALC="${{ github.action_path }}/../../tools/risk-calculator.ts"
+        
+        if [ -f "$RISK_CALC" ]; then
+          TIER=$(bun run "$RISK_CALC" \
+            --position "${{ steps.detect.outputs.position }}" \
+            --files-changed "${{ github.event.pull_request.changed_files }}" \
+            --critical "${{ steps.paths.outputs.critical }}" \
+            --draft "${{ github.event.pull_request.draft }}" \
+            --event "${{ github.event_name }}" \
+            --graphite-skip "${{ steps.graphite.outputs.skip }}" \
+            2>/dev/null || echo "essential")
+        else
+          # Fallback tier calculation
+          TIER="essential"
+          if [[ "${{ github.event_name }}" == "merge_group" ]]; then
+            TIER="full"
+          elif [[ "${{ steps.paths.outputs.critical }}" == "true" ]]; then
+            TIER="full"
+          elif [[ "${{ github.event.pull_request.changed_files }}" -lt 5 && "${{ github.event.pull_request.draft }}" == "true" ]]; then
+            TIER="minimal"
+          fi
+        fi
+        
+        echo "tier=$TIER" >> $GITHUB_OUTPUT
+        echo "critical=${{ steps.paths.outputs.critical }}" >> $GITHUB_OUTPUT
+
+    - name: Detect Agent
+      id: agent
+      shell: bash
+      run: |
+        ACTOR="${{ github.actor }}"
+        IS_AGENT="false"
+        
+        # Check for bot accounts
+        if [[ "$ACTOR" == *"[bot]"* ]] || [[ "$ACTOR" == "github-actions" ]] || [[ "$ACTOR" == "dependabot" ]]; then
+          IS_AGENT="true"
+        fi
+        
+        # Check for known AI agent commit patterns
+        if git log -1 --format=%B | grep -q "Generated with \[Claude Code\]"; then
+          IS_AGENT="true"
+        fi
+        
+        echo "is_agent=$IS_AGENT" >> $GITHUB_OUTPUT
+
+    - name: Generate Cache Keys
+      id: cache
+      shell: bash
+      run: |
+        CACHE_GEN="${{ github.action_path }}/../../tools/cache-key-gen.ts"
+        
+        if [ -f "$CACHE_GEN" ]; then
+          CACHE_OUTPUT=$(bun run "$CACHE_GEN" --lang "${{ steps.detect.outputs.lang }}" 2>/dev/null || echo '{}')
+          echo "$CACHE_OUTPUT" | jq -r 'to_entries | .[] | "\(.key)=\(.value)"' >> $GITHUB_OUTPUT
+        else
+          # Fallback cache key generation
+          LANG="${{ steps.detect.outputs.lang }}"
+          case "$LANG" in
+            bun)
+              echo "cache_key=${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}" >> $GITHUB_OUTPUT
+              echo "cache_path=~/.bun/install/cache" >> $GITHUB_OUTPUT
+              ;;
+            node)
+              echo "cache_key=${{ runner.os }}-node-${{ hashFiles('**/package-lock.json', '**/yarn.lock', '**/pnpm-lock.yaml') }}" >> $GITHUB_OUTPUT
+              echo "cache_path=~/.npm
+~/.yarn/cache
+~/.cache/pnpm" >> $GITHUB_OUTPUT
+              ;;
+            rust)
+              echo "cache_key=${{ runner.os }}-rust-${{ hashFiles('**/Cargo.lock') }}" >> $GITHUB_OUTPUT
+              echo "cache_path=~/.cargo/registry
+~/.cargo/git
+target" >> $GITHUB_OUTPUT
+              ;;
+            go)
+              echo "cache_key=${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}" >> $GITHUB_OUTPUT
+              echo "cache_path=~/go/pkg/mod" >> $GITHUB_OUTPUT
+              ;;
+            python)
+              echo "cache_key=${{ runner.os }}-python-${{ hashFiles('**/requirements.txt', '**/pyproject.toml', '**/poetry.lock') }}" >> $GITHUB_OUTPUT
+              echo "cache_path=~/.cache/pip" >> $GITHUB_OUTPUT
+              ;;
+            *)
+              echo "cache_key=" >> $GITHUB_OUTPUT
+              echo "cache_path=" >> $GITHUB_OUTPUT
+              ;;
+          esac
+        fi
