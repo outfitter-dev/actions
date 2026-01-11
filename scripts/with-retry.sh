@@ -3,7 +3,11 @@
 
 set -euo pipefail
 
-# Configuration
+# Error handling - report line number on failure
+# Note: This trap is disabled when set +e is active (during intentional retry handling)
+trap 'echo "[ERROR] with-retry.sh failed unexpectedly on line $LINENO (exit code: $?)" >&2; exit 1' ERR
+
+# Configuration (with safe defaults for unset variables)
 CMD="${*:-echo 'No command provided'}"
 SOFT_TIMEOUT="${TIMEOUT_SOFT:-10m}"
 HARD_TIMEOUT="${TIMEOUT_HARD:-20m}"
@@ -38,7 +42,7 @@ log_error() {
 
 # Execute command with timeout
 run_with_timeout() {
-  local timeout="$1"
+  local timeout="${1:-10m}"
   shift
   
   if command -v timeout >/dev/null 2>&1; then
@@ -59,18 +63,18 @@ run_with_timeout() {
     fi
     
     local count=0
-    while kill -0 $pid 2>/dev/null; do
+    while kill -0 "$pid" 2>/dev/null; do
       if [[ $count -ge $seconds ]]; then
-        kill -TERM $pid 2>/dev/null || true
+        kill -TERM "$pid" 2>/dev/null || true
         sleep 2
-        kill -KILL $pid 2>/dev/null || true
+        kill -KILL "$pid" 2>/dev/null || true
         return 124 # Timeout exit code
       fi
       sleep 1
-      ((count++))
+      ((count++)) || true  # Prevent exit on arithmetic returning 0
     done
     
-    wait $pid
+    wait "$pid"
   fi
 }
 
@@ -85,6 +89,7 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
   fi
   
   # Try with soft timeout first
+  # Disable errexit for intentional failure handling
   set +e
   if [[ $attempt -eq 0 ]]; then
     log_info "Running: $CMD"
@@ -109,7 +114,7 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
       if [[ $attempt -eq 0 ]]; then
         log_warn "Soft timeout reached, extending to $HARD_TIMEOUT"
         # Don't count this as a retry, just extend timeout
-        ((attempt--))
+        ((attempt--)) || true  # Prevent exit on arithmetic returning 0
       else
         log_error "Hard timeout reached"
         if [[ $attempt -lt $MAX_RETRIES ]]; then
@@ -126,9 +131,9 @@ while [[ $attempt -le $MAX_RETRIES ]]; do
       ;;
   esac
   
-  ((attempt++))
+  ((attempt++)) || true  # Prevent exit on arithmetic returning 0
 done
 
 # All retries exhausted
 log_error "Command failed after $MAX_RETRIES retries"
-exit $exit_code
+exit "$exit_code"
