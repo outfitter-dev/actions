@@ -3,6 +3,7 @@
 import { createHash } from 'node:crypto';
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { Glob } from 'bun';
 
 export interface CacheConfig {
   cache_key: string;
@@ -32,12 +33,25 @@ export class CacheKeyGenerator {
   }
 
   private globHash(pattern: string): string {
-    // Simplified glob hash - in production would use proper glob library
-    const files = Bun.spawnSync(['find', '.', '-name', pattern], { cwd: this.cwd });
-    if (files.exitCode !== 0) return 'noglobmatch';
-    
-    const content = files.stdout.toString();
-    return createHash('sha256').update(content).digest('hex').substring(0, 16);
+    // Validate pattern to prevent injection - only allow safe glob characters
+    if (!/^[a-zA-Z0-9_.*?[\]{}/-]+$/.test(pattern)) {
+      return 'invalidpattern';
+    }
+
+    try {
+      // Use Bun's native Glob API instead of shell command
+      const glob = new Glob(pattern);
+      const files = Array.from(glob.scanSync({ cwd: this.cwd, onlyFiles: true }));
+
+      if (files.length === 0) return 'noglobmatch';
+
+      // Sort for deterministic hash
+      files.sort();
+      const content = files.join('\n');
+      return createHash('sha256').update(content).digest('hex').substring(0, 16);
+    } catch {
+      return 'noglobmatch';
+    }
   }
 
   generate(lang: string): CacheConfig | null {
@@ -206,14 +220,25 @@ export class CacheKeyGenerator {
 
 // CLI interface
 if (import.meta.main) {
-  const lang = process.argv[2]?.replace('--lang=', '') || 'unknown';
-  
-  const generator = new CacheKeyGenerator();
-  const config = generator.generate(lang);
-  
-  if (config) {
-    console.log(JSON.stringify(config, null, 2));
-  } else {
-    console.log('{}');
+  try {
+    const lang = process.argv[2]?.replace('--lang=', '') || 'unknown';
+
+    // Validate language input to prevent injection
+    if (!/^[a-zA-Z0-9_-]+$/.test(lang)) {
+      console.error('Error: Invalid language name');
+      process.exit(1);
+    }
+
+    const generator = new CacheKeyGenerator();
+    const config = generator.generate(lang);
+
+    if (config) {
+      console.log(JSON.stringify(config, null, 2));
+    } else {
+      console.log('{}');
+    }
+  } catch (error) {
+    console.error('Error:', error instanceof Error ? error.message : String(error));
+    process.exit(1);
   }
 }
