@@ -50,12 +50,12 @@ jobs:
           fetch-depth: 0
 
       - id: det
-        uses: outfitter-dev/actions/actions/detector@main
+        uses: outfitter-dev/actions/.github/actions/detector@main
         with:
           use_graphite: ${{ inputs.use_graphite }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
         env:
           GRAPHITE_TOKEN: ${{ secrets.GRAPHITE_CI_OPTIMIZER_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   meta:
     name: CI Status
@@ -64,6 +64,10 @@ jobs:
     if: always()
     outputs:
       summary: ${{ steps.sum.outputs.summary }}
+    # Expose secrets as env vars for use in step if conditions
+    env:
+      ENABLE_COMMENTS: ${{ secrets.CI_STICKY_COMMENTS }}
+      STATUS_WEBHOOK: ${{ secrets.CI_STATUS_WEBHOOK }}
     steps:
       - id: sum
         run: |
@@ -87,7 +91,7 @@ jobs:
       - name: Post PR Comment
         if: |
           github.event_name == 'pull_request' && 
-          (secrets.CI_STICKY_COMMENTS == 'true' || contains(github.event.pull_request.body, '[belay-comment]'))
+          (env.ENABLE_COMMENTS == 'true' || contains(github.event.pull_request.body, '[belay-comment]'))
         uses: marocchino/sticky-pull-request-comment@v2
         with:
           header: belay-ci
@@ -101,7 +105,7 @@ jobs:
             - **Critical**: ${{ needs.detect.outputs.critical }}
 
       - name: Send Webhook
-        if: secrets.CI_STATUS_WEBHOOK != ''
+        if: env.STATUS_WEBHOOK != ''
         run: |
           curl -fsSL -H 'Content-Type: application/json' \
             -d '{
@@ -115,7 +119,7 @@ jobs:
               "merge_queue_event": ${{ github.event_name == 'merge_group' }},
               "is_monorepo": ${{ needs.detect.outputs.is_monorepo == 'true' }}
             }' \
-            "${{ secrets.CI_STATUS_WEBHOOK }}" || true
+            "$STATUS_WEBHOOK" || true
 
   minimal:
     name: Minimal
@@ -167,9 +171,17 @@ jobs:
         run: ${{ needs.detect.outputs.install_cmd }}
 
       - name: Lint
+        id: lint
         if: needs.detect.outputs.lint_cmd != ''
         run: ${{ needs.detect.outputs.lint_cmd }}
         continue-on-error: ${{ needs.detect.outputs.is_agent == 'true' }}
+
+      - name: Report lint status
+        if: steps.lint.outcome == 'failure' && needs.detect.outputs.is_agent == 'true'
+        run: |
+          echo "::warning::Lint failed but continuing for agent run"
+          echo "## ⚠️ Lint Failed" >> $GITHUB_STEP_SUMMARY
+          echo "Lint checks failed but continuing because this is an agent run." >> $GITHUB_STEP_SUMMARY
 
       - name: Type Check
         if: needs.detect.outputs.typecheck_cmd != ''
