@@ -28,8 +28,8 @@ The main product is a reusable GitHub workflow (`belay.yml`) that provides:
 
 ### Key Components
 
-- `.github/workflows/belay.yml` - Main reusable workflow (will be created)
-- `actions/detector/action.yml` - Composite action for language/tool detection (will be created)
+- `.github/workflows/belay.yml` - Main reusable workflow
+- `.github/actions/detector/action.yml` - Composite action for language/tool detection
 - `docs/` - Documentation for all actions
 - `.agents/docs/PRD-initial.md` - Product requirements document with implementation details
 
@@ -44,15 +44,12 @@ Since this is a GitHub Actions repository, there are no traditional build/test c
 brew install act  # macOS
 # or see https://github.com/nektos/act for other platforms
 
-# Test PR workflow
-act pull_request -j ci -e events/pull_request.json
-
-# Test merge queue
-act merge_group -j ci -e events/merge_group.json
-
-# Test with Graphite provider
-export GRAPHITE_CI_OPTIMIZER_TOKEN=fake
-act pull_request -j ci -e events/pull_request.json
+# Automated local testing
+bun run act:setup
+bun run act:minimal
+bun run act:essential
+bun run act:full
+bun run act:merge
 ```
 
 ### Linting and Formatting
@@ -124,20 +121,20 @@ Sources: `package.json` scripts, Makefile targets, or language-specific defaults
 
 ## Configuration Files
 
-### `.ci.json` (Optional)
+### `.ci.toml` (Optional)
 Repository-specific configuration to override defaults:
 
-```json
-{
-  "force": "full|essential|minimal",
-  "timeout_minutes": 30,
-  "ignore": ["**/*.md"],
-  "critical_globs": ["packages/**/package.json"],
-  "outputs": {
-    "comment": true,
-    "webhook": false
-  }
-}
+```toml
+# Force tier: "full" | "essential" | "minimal"
+force = "essential"
+
+timeout_minutes = 30
+ignore = ["**/*.md"]
+critical_globs = ["packages/**/package.json"]
+
+[outputs]
+comment = true
+webhook = false
 ```
 
 ### Required Secrets (Optional)

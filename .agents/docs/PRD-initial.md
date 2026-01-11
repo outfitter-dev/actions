@@ -31,7 +31,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit # That’s it.
 ```
 
@@ -321,7 +321,7 @@ Monorepos: detect workspaces (pnpm/npm/yarn), run package‑scoped tasks affecte
 ```text
 @outfitter/actions/
   ├─ .github/workflows/belay.yml
-  ├─ actions/detector/action.yml
+  ├─ .github/actions/detector/action.yml
   ├─ runtime/Dockerfile
   ├─ plugins/
   │   ├─ node/
@@ -380,7 +380,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - id: det
-        uses: outfitter-dev/actions/actions/detector@v1
+        uses: outfitter-dev/actions/.github/actions/detector@alpha
         with:
           use_graphite: auto
         env:
@@ -438,7 +438,7 @@ jobs:
       - uses: actions/checkout@v4
 
       # Setup language runtimes on demand
-      - uses: oven-sh/setup-bun@v1
+      - uses: oven-sh/setup-bun@v2
         if: needs.detect.outputs.lang == 'bun'
       - uses: actions/setup-node@v4
         if: needs.detect.outputs.lang == 'node'
@@ -516,7 +516,7 @@ jobs:
 
 ---
 
-### 16.2 Composite Action: `actions/detector/action.yml`
+### 16.2 Composite Action: `.github/actions/detector/action.yml`
 
 ```yaml
 name: Outfitter Detector
@@ -759,7 +759,7 @@ We ship a **sandbox** example so you can exercise all paths locally without touc
 ### 17.1 Layout
 
 ```text
-examples/sandbox/
+apps/sandbox/
   ├─ .github/workflows/belay.yml          # copied from §16.1 for local runs
   ├─ package.json
   ├─ bun.lockb
@@ -822,7 +822,7 @@ describe('sum', () => {
 **Pull Request path (GitHub provider):**
 
 ```bash
-cd examples/sandbox
+cd apps/sandbox
 act pull_request -j minimal -e events/pull_request.json
 act pull_request -j essential -e events/pull_request.json
 act pull_request -j full -e events/pull_request.json
@@ -900,7 +900,7 @@ act pull_request -j minimal
 ## 19. Definition of Done (updated)
 
 - `belay.yml` and `actions/detector` committed; version tag `v1` cut.
-- `examples/sandbox` runs green under `act` for PR + merge_group with and without graphite env.
+- `apps/sandbox` runs green under `act` for PR + merge_group with and without graphite env.
 - Sticky comment and webhook both verified locally (webhook via `nc -l 8080`).
 - Cache warms between two consecutive `act` runs (lockfile keyed).
 - Flake retry proven by injecting a transient failing test and observing pass on retry.
