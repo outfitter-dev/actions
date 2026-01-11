@@ -1,0 +1,11 @@
+{
+  "event_name": "merge_group",
+  "merge_group": { "head_sha": "deadbeef" },
+  "pull_request": {
+    "number": 1,
+    "draft": false,
+    "changed_files": 12,
+    "base": { "ref": "main" },
+    "head": { "ref": "feature/top" }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "event_name": "pull_request",
+  "pull_request": {
+    "number": 1,
+    "draft": false,
+    "changed_files": 6,
+    "base": { "ref": "main" },
+    "head": { "ref": "feature/stack-2-of-3" }
+  }
+}

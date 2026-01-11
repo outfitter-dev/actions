@@ -1,0 +1,12 @@
+# Minimal Belay CI Setup - Zero Configuration Required
+# Just copy this file to .github/workflows/ci.yml in your repository
+
+name: CI
+on:
+  pull_request:
+  merge_group:
+
+jobs:
+  ci:
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    secrets: inherit

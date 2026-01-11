@@ -15,6 +15,11 @@
     "allowImportingTsExtensions": true,
     "noEmit": true
   },
-  "include": ["tools/**/*.ts", "**/*.test.ts"],
+  "include": [
+    "tools/**/*.ts",
+    "**/*.test.ts",
+    "apps/**/*.ts",
+    "packages/**/*.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }
