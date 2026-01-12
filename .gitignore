@@ -60,6 +60,7 @@ temp/
 .secrets
 events/*.json.local
 .actrc.local
+bin/
 
 # OS files
 .DS_Store
@@ -135,3 +136,6 @@ public
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Codex
+.codex/config.toml

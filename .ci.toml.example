@@ -1,0 +1,41 @@
+# Belay CI Configuration (Optional)
+# This file is only needed for the 5% of repositories that need custom behavior
+# Missing file = zero-config defaults apply
+
+# Force a specific CI tier (overrides risk calculation)
+# Options: "minimal", "essential", "full"
+# force = "essential"
+
+# Timeout for CI jobs in minutes (5-120)
+timeout_minutes = 30
+
+# File patterns to ignore when calculating risk
+# These files won't trigger higher CI tiers
+ignore = [
+  "**/*.md",
+  "docs/**",
+  "*.txt",
+  ".github/workflows/*.yml"
+]
+
+# Critical file patterns that force full CI
+# Changes to these files always trigger comprehensive testing
+critical_globs = [
+  "packages/**/package.json",
+  "**/schema.*",
+  ".github/**",
+  "**/Cargo.toml",
+  "**/go.mod",
+  "**/pyproject.toml",
+  "**/pom.xml",
+  "**/tsconfig.json",
+  "**/biome.json"
+]
+
+# Output configuration
+[outputs]
+# Enable sticky PR comments with CI status
+comment = false
+
+# Enable webhook notifications (requires CI_STATUS_WEBHOOK secret)
+webhook = false

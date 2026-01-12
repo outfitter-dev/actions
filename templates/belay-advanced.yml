@@ -1,0 +1,37 @@
+# Advanced Belay CI Setup - With Optional Configurations
+# Copy to .github/workflows/ci.yml and customize as needed
+
+name: CI
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      force_tier:
+        description: 'Force CI tier (minimal/essential/full)'
+        required: false
+        type: choice
+        options:
+          - ''
+          - minimal
+          - essential
+          - full
+
+# Cancel in-progress runs when new commits are pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    with:
+      use_graphite: auto  # or 'true'/'false' to force
+    secrets: inherit
+    # Optional: Pass specific secrets if not using inherit
+    # secrets:
+    #   GRAPHITE_CI_OPTIMIZER_TOKEN: ${{ secrets.GRAPHITE_CI_OPTIMIZER_TOKEN }}
+    #   CI_STICKY_COMMENTS: ${{ secrets.CI_STICKY_COMMENTS }}
+    #   CI_STATUS_WEBHOOK: ${{ secrets.CI_STATUS_WEBHOOK }}
