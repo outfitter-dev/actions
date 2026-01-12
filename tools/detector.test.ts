@@ -1,4 +1,4 @@
-import { describe, expect, test, bench, group } from 'bun:test';
+import { describe, expect, test } from 'bun:test';
 import { Detector } from './detector';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -87,39 +87,5 @@ members = ["crates/core", "crates/cli"]
   });
 });
 
-// Performance benchmarks
-group('detector performance', () => {
-  const tmpDir = mkdtempSync(join(tmpdir(), 'bench-'));
-  
-  // Set up a complex project structure
-  writeFileSync(join(tmpDir, 'package.json'), JSON.stringify({
-    scripts: {
-      lint: 'eslint .',
-      test: 'jest',
-      build: 'webpack',
-    },
-    workspaces: ['packages/*'],
-  }));
-  writeFileSync(join(tmpDir, 'bun.lockb'), '');
-  
-  const detector = new Detector(tmpDir);
-
-  bench('language detection', () => {
-    detector.detectLanguage();
-  });
-
-  bench('monorepo detection', () => {
-    detector.detectMonorepo();
-  });
-
-  bench('provider detection', () => {
-    detector.detectProvider();
-  });
-
-  bench('full detection', async () => {
-    await detector.detect();
-  });
-
-  // Cleanup
-  setTimeout(() => rmSync(tmpDir, { recursive: true }), 1000);
-});
+// Performance benchmarks - run with: bun test --bench detector.bench.ts
+// Moved to separate file to avoid import issues with regular test runs

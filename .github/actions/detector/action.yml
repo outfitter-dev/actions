@@ -8,41 +8,69 @@ inputs:
   use_graphite:
     description: 'Use Graphite CI Optimizer (true|false|auto)'
     default: 'auto'
-  config_file:
-    description: 'Path to .ci.json config file'
-    default: '.ci.json'
+  config_inline:
+    description: 'Inline config as YAML (optional)'
+    default: ''
+  github_token:
+    description: 'GitHub token for API access'
+    required: false
+    default: ''
 
 outputs:
   provider:
     description: 'CI provider (graphite|github)'
+    value: ${{ steps.detect.outputs.provider }}
   position:
     description: 'Stack position (top|middle|bottom|unknown)'
+    value: ${{ steps.pos.outputs.position || steps.detect.outputs.position }}
   tier:
     description: 'CI tier (minimal|essential|full)'
+    value: ${{ steps.tier.outputs.tier }}
   is_agent:
     description: 'Whether actor is an agent/bot'
+    value: ${{ steps.agent.outputs.is_agent }}
   install_cmd:
     description: 'Install command for dependencies'
+    value: ${{ steps.detect.outputs.install_cmd }}
   lint_cmd:
     description: 'Lint command'
+    value: ${{ steps.detect.outputs.lint_cmd }}
   typecheck_cmd:
     description: 'Type check command'
+    value: ${{ steps.detect.outputs.typecheck_cmd }}
   test_cmd:
     description: 'Test command'
+    value: ${{ steps.detect.outputs.test_cmd }}
   build_cmd:
     description: 'Build command'
+    value: ${{ steps.detect.outputs.build_cmd }}
   lang:
     description: 'Primary language detected'
+    value: ${{ steps.detect.outputs.lang }}
   critical:
     description: 'Whether critical paths were modified'
+    value: ${{ steps.tier.outputs.critical }}
+  timeout_minutes:
+    description: 'Timeout in minutes for CI jobs'
+    value: ${{ steps.detect.outputs.timeout_minutes }}
+  critical_globs:
+    description: 'Configured critical glob patterns (JSON array)'
+    value: ${{ steps.detect.outputs.critical_globs }}
+  force:
+    description: 'Forced tier from config (if any)'
+    value: ${{ steps.detect.outputs.force }}
   cache_key:
     description: 'Cache key for dependencies'
+    value: ${{ steps.cache.outputs.cache_key }}
   cache_path:
     description: 'Paths to cache'
+    value: ${{ steps.cache.outputs.cache_path }}
   workspaces:
     description: 'Workspace configuration (JSON)'
+    value: ${{ steps.detect.outputs.workspaces }}
   is_monorepo:
     description: 'Whether this is a monorepo'
+    value: ${{ steps.detect.outputs.is_monorepo }}
 
 runs:
   using: 'composite'
@@ -55,13 +83,10 @@ runs:
     - name: Install Detection Tools
       shell: bash
       run: |
-        # Check if we're in the actions repo itself or using it externally
-        if [ -f "${{ github.action_path }}/../../package.json" ]; then
-          cd "${{ github.action_path }}/../.."
-          bun install --frozen-lockfile 2>/dev/null || bun install
-        else
-          # Using as external action, tools might not be available yet
-          echo "Running in external mode"
+        # If this is the source repo, ensure tools are installed at workspace root
+        if [ -f "$GITHUB_WORKSPACE/package.json" ]; then
+          cd "$GITHUB_WORKSPACE"
+          bun install --frozen-lockfile 2>/dev/null || bun install || true
         fi
 
     - name: Run Detector
@@ -70,11 +95,11 @@ runs:
       env:
         USE_GRAPHITE: ${{ inputs.use_graphite }}
         GRAPHITE_TOKEN: ${{ env.GRAPHITE_TOKEN }}
-        CONFIG_FILE: ${{ inputs.config_file }}
         GITHUB_CONTEXT: ${{ toJson(github) }}
+        CONFIG_INLINE: ${{ inputs.config_inline }}
       run: |
         # Try to use the TypeScript detector if available
-        DETECTOR_PATH="${{ github.action_path }}/../../tools/detector.ts"
+        DETECTOR_PATH="$GITHUB_WORKSPACE/tools/detector.ts"
         
         if [ -f "$DETECTOR_PATH" ]; then
           echo "Using TypeScript detector"
@@ -88,24 +113,56 @@ runs:
           source "${{ github.action_path }}/detect.sh"
         fi
 
+    - name: Build Critical Filters
+      id: crit
+      shell: bash
+      env:
+        # Pass JSON via environment variable to avoid YAML parsing issues
+        CRITICAL_GLOBS_JSON: ${{ steps.detect.outputs.critical_globs }}
+      run: |
+        set -euo pipefail
+        DEFAULTS=(
+          "packages/**/package.json"
+          "**/schema.*"
+          ".github/**"
+          "**/Cargo.toml"
+          "**/go.mod"
+          "**/pyproject.toml"
+          "**/pom.xml"
+          "**/tsconfig.json"
+          "*.config.*"
+        )
+
+        TMP=$(mktemp)
+        echo "critical:" >> "$TMP"
+        for g in "${DEFAULTS[@]}"; do
+          echo "  - '${g}'" >> "$TMP"
+        done
+
+        # Parse custom critical globs from environment variable
+        if [[ -n "${CRITICAL_GLOBS_JSON:-}" ]]; then
+          echo "$CRITICAL_GLOBS_JSON" > cfg.json
+          node -e "const fs=require('fs');const arr=JSON.parse(fs.readFileSync('cfg.json','utf8'));if(Array.isArray(arr)){arr.forEach(g=>console.log('  - \''+String(g)+'\''))}" >> "$TMP"
+          rm -f cfg.json || true
+        fi
+
+        echo "filters<<EOF" >> $GITHUB_OUTPUT
+        cat "$TMP" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        rm -f "$TMP" || true
+
     - name: Detect Critical Paths
       id: paths
       uses: dorny/paths-filter@v3
       with:
-        filters: |
-          critical:
-            - 'packages/**/package.json'
-            - '**/schema.*'
-            - '.github/**'
-            - '**/Cargo.toml'
-            - '**/go.mod'
-            - '**/pyproject.toml'
-            - '**/pom.xml'
-            - '**/build.gradle*'
+        filters: ${{ steps.crit.outputs.filters }}
 
     - name: Determine Position (GitHub)
+      id: pos
       if: steps.detect.outputs.provider == 'github' || steps.detect.outputs.provider == ''
       shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
       run: |
         # Determine stack position for GitHub provider
         HEAD="${{ github.head_ref }}"
@@ -143,8 +200,15 @@ runs:
       id: tier
       shell: bash
       run: |
+        # Respect forced tier from config, if set
+        if [[ -n "${{ steps.detect.outputs.force }}" ]]; then
+          echo "tier=${{ steps.detect.outputs.force }}" >> $GITHUB_OUTPUT
+          echo "critical=${{ steps.paths.outputs.critical }}" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
         # Run the risk calculator if available
-        RISK_CALC="${{ github.action_path }}/../../tools/risk-calculator.ts"
+        RISK_CALC="$GITHUB_WORKSPACE/tools/risk-calculator.ts"
         
         if [ -f "$RISK_CALC" ]; then
           TIER=$(bun run "$RISK_CALC" \
@@ -193,7 +257,7 @@ runs:
       id: cache
       shell: bash
       run: |
-        CACHE_GEN="${{ github.action_path }}/../../tools/cache-key-gen.ts"
+        CACHE_GEN="$GITHUB_WORKSPACE/tools/cache-key-gen.ts"
         
         if [ -f "$CACHE_GEN" ]; then
           CACHE_OUTPUT=$(bun run "$CACHE_GEN" --lang "${{ steps.detect.outputs.lang }}" 2>/dev/null || echo '{}')
