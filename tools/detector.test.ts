@@ -26,7 +26,7 @@ describe('Detector', () => {
       expect(result.installCmd).toBe('bun install --frozen-lockfile');
       expect(result.lintCmd).toBe('bun run lint');
       expect(result.typecheckCmd).toBe('bun run typecheck');
-      expect(result.testCmd).toBe('bun test');
+      expect(result.testCmd).toBe('bun run test');
       expect(result.buildCmd).toBe('bun run build');
     } finally {
       rmSync(tmpDir, { recursive: true });
