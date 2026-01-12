@@ -35,7 +35,13 @@ jobs:
     secrets: inherit
 ```
 
-[Documentation](./docs/belay.md) | [Examples](./examples/belay)
+[Documentation](./docs/actions/belay.md) | [Sandbox App](./apps/sandbox)
+
+### 🏷️ PR Size Labeler
+
+Applies simple `size:*` labels to pull requests based on total changed lines (additions + deletions). Runs safely for forks and creates labels automatically if missing.
+
+[Documentation](./docs/labeler.md)
 
 ---
 
@@ -88,22 +94,27 @@ Belay works out of the box with no configuration needed. It will auto-detect you
 
 ### Optional Configuration
 
-For the 5% of cases that need customization, create a `.ci.json` file in your repository root:
+For the 5% of cases that need customization, create a `.ci.toml` file in your repository root:
 
-```json
-{
-  "force": "full",              // Force a specific tier: full|essential|minimal
-  "timeout_minutes": 30,        // Override default timeout
-  "ignore": ["**/*.md"],        // Glob patterns to ignore
-  "critical_globs": [           // Files that trigger full CI
-    "packages/**/package.json",
-    "**/schema.*"
-  ],
-  "outputs": {
-    "comment": true,            // Enable PR comments
-    "webhook": false            // Enable webhook notifications
-  }
-}
+```toml
+# Force a specific tier: full | essential | minimal
+force = "full"
+
+# Override default timeout (minutes)
+timeout_minutes = 30
+
+# Glob patterns to ignore in risk assessment
+ignore = ["**/*.md"]
+
+# Files that trigger full CI
+critical_globs = [
+  "packages/**/package.json",
+  "**/schema.*",
+]
+
+[outputs]
+comment = true            # Enable PR comments
+webhook = false           # Enable webhook notifications
 ```
 
 ### Secrets
@@ -120,14 +131,16 @@ Optional secrets for enhanced functionality:
 @outfitter/actions/
 ├── .github/
 │   └── workflows/
-│       └── belay.yml          # Main reusable workflow
-├── actions/
-│   └── detector/
-│       └── action.yml         # Language/tool detection
+│       └── belay.yml          # Reusable workflow (reference with @alpha/@latest/@v1)
+├── .github/
+│   └── actions/
+│       └── detector/          # Composite detector action
+│           └── action.yml
 ├── docs/
-│   └── belay.md              # Detailed documentation
-├── examples/
-│   └── belay/                # Example configurations
+│   └── actions/
+│       └── belay.md          # Detailed documentation
+├── apps/
+│   └── sandbox/              # Example sandbox app for local testing
 └── scripts/
     └── with-retry.sh         # Helper scripts
 ```
@@ -136,14 +149,19 @@ Optional secrets for enhanced functionality:
 
 ### Testing Locally
 
-Use [`act`](https://github.com/nektos/act) to test workflows locally:
+Use [`act`](https://github.com/nektos/act) to test locally (automated helpers provided):
 
 ```bash
-# Test PR workflow
-act pull_request -j ci
+# One-time setup (downloads act if missing)
+bun run act:setup
 
-# Test merge queue
-act merge_group -j ci
+# Run minimal/essential/full with sample events
+bun run act:minimal
+bun run act:essential
+bun run act:full
+
+# Merge queue (always full)
+bun run act:merge
 ```
 
 ### Contributing
@@ -170,3 +188,9 @@ MIT © [Outfitter](https://github.com/outfitter-dev)
 - [Documentation](https://github.com/outfitter-dev/actions/tree/main/docs)
 - [Issues](https://github.com/outfitter-dev/actions/issues)
 - [Discussions](https://github.com/outfitter-dev/actions/discussions)
+
+## Versioning
+
+- Recommended tag while iterating: `@alpha`
+- Stable consumers: `@latest` or major pin like `@v1`
+- Tag aliases are automated by `.github/workflows/versioning.yml`
