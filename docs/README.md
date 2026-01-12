@@ -1,224 +1,166 @@
 # Outfitter Actions Documentation
 
-> Complete documentation for @outfitter/actions reusable workflows and composite actions.
+Welcome to the documentation for `@outfitter/actions` - a collection of reusable GitHub Actions and workflows designed to make CI/CD simple and automatic.
 
-## Quick Links
+## Quick Start
 
-### Actions
-
-- **[Belay](./actions/belay.md)** - Zero-config CI workflow with auto-detection
-
-### Guides
-
-- [Getting Started](#getting-started)
-- [Migration Guide](#migration-guide)
-- [Best Practices](#best-practices)
-- [Troubleshooting](#troubleshooting)
-
-## Getting Started
-
-### Prerequisites
-
-- GitHub repository
-- Basic understanding of GitHub Actions
-- (Optional) Graphite for stacked PRs
-
-### Installation
-
-Add the Belay workflow to your repository:
-
-1. Create `.github/workflows/ci.yml` in your repository
-2. Add the following content:
+Add this to your repository's `.github/workflows/ci.yml`:
 
 ```yaml
 name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
-3. Commit and push - that's it!
+That's it! No configuration needed. The workflow will auto-detect your language, tools, and run appropriate checks.
 
-## Available Actions
+## Available Actions & Workflows
 
-### Belay
+### Workflows
 
-Our flagship zero-config CI workflow. [Full documentation →](./actions/belay.md)
+- **[Belay](./actions/belay.md)** - Zero-config CI workflow with auto-detection
+  - Language and tool detection
+  - Risk-based CI tiers
+  - Monorepo support
+  - Smart caching
+  - Flake mitigation
+- **[PR Size Labeler](../docs/labeler.md)** - Auto-applies `size:*` labels to PRs
 
-**Key Features:**
+### Composite Actions
 
-- Auto-detects language and tooling
-- Risk-based CI intensity
-- Self-healing with automatic retries
-- Agent-aware output formatting
+- **[Detector](./actions/detector.md)** - Language and tool detection action
+  - Polyglot support
+  - Monorepo detection
+  - Command discovery
 
-## Migration Guide
+## Documentation
 
-### From Manual GitHub Actions
+- **[Architecture](./ARCHITECTURE.md)** - Repository structure and design decisions
+- **Contributing** - See repository README for general contributing
+- **[Testing](./TESTING.md)** - Local testing with act and Bun
 
-If you're currently using manual GitHub Actions workflows:
+## Features
 
-1. **Backup your existing workflow** - Copy your current `.github/workflows` files
-2. **Add Belay** - Create a new workflow using Belay
-3. **Test in parallel** - Run both workflows temporarily
-4. **Remove old workflow** - Once confident, remove the manual workflow
+### 🚀 Zero Configuration
+- Works out of the box with no setup
+- Auto-detects language and tools
+- Sensible defaults for 95% of projects
 
-### From Other CI Systems
+### 🎯 Smart Detection
+- Supports Bun, Node.js, Rust, Go, Python, Java, and more
+- Detects monorepo structures
+- Finds test, lint, and build commands automatically
 
-Coming from Jenkins, CircleCI, or Travis? Belay handles the heavy lifting:
+### ⚡ Performance Optimized
+- Risk-based CI tiers (minimal/essential/full)
+- Intelligent caching per language
+- Parallel job execution
+- Flake retry with adaptive timeouts
 
-1. **No configuration files needed** - Belay auto-detects your setup
-2. **Keep your existing scripts** - If you have `package.json` scripts or Makefile targets, Belay will use them
-3. **Gradual migration** - Run Belay alongside your existing CI initially
+### 🔧 Progressive Enhancement
+- TypeScript tools with Bun for speed
+- Bash fallbacks for compatibility
+- Extensible architecture
 
-## Best Practices
+### 🌐 Provider Support
+- GitHub native (default)
+- Graphite CI Optimizer integration
+- Merge queue aware
 
-### Repository Setup
+## Configuration (Optional)
 
-1. **Use conventional script names** in `package.json`:
-   - `lint` - For linting
-   - `typecheck` - For type checking  
-   - `test` - For running tests
-   - `build` - For building the project
+While zero-config is the goal, you can customize behavior with `.ci.toml` (preferred), `.ci.yaml` / `.ci.yml`, or inline YAML via the workflow input `with.config`.
 
-2. **Leverage merge queues** - Enable GitHub merge queue or use Graphite for optimal performance
+```toml
+# .ci.toml (preferred)
+force = "full"
+timeout_minutes = 45
 
-3. **Keep branches short-lived** - Belay works best with trunk-based development
+critical_globs = ["packages/**/package.json"]
 
-### Performance Optimization
-
-- **Use Graphite** - Add `GRAPHITE_CI_OPTIMIZER_TOKEN` for stack-aware optimization
-- **Cache dependencies** - Belay automatically handles caching for most languages
-- **Parallelize when possible** - Split large test suites across multiple jobs
-
-### Security
-
-- **Never commit secrets** - Use GitHub Secrets for sensitive values
-- **Review webhook payloads** - If using webhook notifications, ensure URLs are secure
-- **Limit permissions** - Belay uses minimal required permissions by default
-
-## Configuration Reference
-
-### Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `GRAPHITE_CI_OPTIMIZER_TOKEN` | Enable Graphite stack optimization | No |
-| `CI_STICKY_COMMENTS` | Enable sticky PR comments | No |
-| `CI_STATUS_WEBHOOK` | Webhook URL for notifications | No |
-
-### `.ci.json` Schema
-
-```typescript
-interface CIConfig {
-  // Force a specific CI tier
-  force?: "full" | "essential" | "minimal";
-  
-  // Override default timeout (minutes)
-  timeout_minutes?: number;
-  
-  // Files to ignore (glob patterns)
-  ignore?: string[];
-  
-  // Critical files that trigger full CI
-  critical_globs?: string[];
-  
-  // Output configuration
-  outputs?: {
-    comment?: boolean;
-    webhook?: boolean;
-  };
-}
+[outputs]
+comment = true
+webhook = false
 ```
 
-## Troubleshooting
+Inline YAML (in your workflow):
 
-### Common Issues
-
-#### "No commands detected"
-
-Belay couldn't find any commands to run. Solutions:
-
-- Add scripts to your `package.json`
-- Create a `Makefile` with standard targets
-- Check that language files are in the repository root
-
-#### "CI taking too long"
-
-If CI is running longer than expected:
-
-- Check if you're hitting the Full tier unnecessarily
-- Review your `.ci.json` for forced tiers
-- Consider splitting large test suites
-
-#### "Tests are flaky"
-
-Belay automatically retries failed tests once. If tests continue to fail:
-
-- Review test implementation for race conditions
-- Check for external dependencies
-- Consider increasing timeouts in test configuration
-
-### Debug Mode
-
-Enable debug output by setting the `ACTIONS_RUNNER_DEBUG` secret to `true` in your repository settings.
-
-## Architecture
-
-### Components
-
-```
-belay.yml (workflow)
-    ├── detect (job)
-    │   └── detector (action)
-    │       ├── Language detection
-    │       ├── Command discovery
-    │       ├── Risk scoring
-    │       └── Provider selection
-    ├── meta (job)
-    │   └── Summary generation
-    └── run (job)
-        ├── minimal
-        ├── essential
-        └── full
+```yaml
+jobs:
+  ci:
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
+    secrets: inherit
+    with:
+      config: |
+        force: full
+        timeout_minutes: 30
 ```
 
-### Decision Flow
+## Tools
 
-1. **Detection Phase** - Analyzes repository structure
-2. **Risk Assessment** - Calculates appropriate CI tier
-3. **Execution Phase** - Runs selected tier
-4. **Reporting Phase** - Generates summaries and notifications
+The repository includes TypeScript CLI tools for local development:
 
-## Contributing
+```bash
+# Install dependencies
+bun install
 
-See our [Contributing Guide](../CONTRIBUTING.md) for details on:
+# Run detector locally
+bun run detect
 
-- Setting up development environment
-- Testing changes locally with `act`
-- Submitting pull requests
-- Code style guidelines
+# Calculate risk tier
+bun run risk
+
+# Validate config
+bun run validate
+
+# Generate test events
+bun run generate-events
+
+# Run tests with benchmarks
+bun test
+```
+
+## Examples
+
+### Basic CI
+```yaml
+uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
+```
+
+### With Graphite
+```yaml
+uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
+secrets:
+  GRAPHITE_CI_OPTIMIZER_TOKEN: ${{ secrets.GRAPHITE_TOKEN }}
+```
+
+### With Comments
+```yaml
+uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
+secrets:
+  CI_STICKY_COMMENTS: "true"
+```
 
 ## Support
 
-### Getting Help
-
-- **GitHub Issues** - For bugs and feature requests
-- **Discussions** - For questions and ideas
-- **Documentation** - You're already here!
-
-### Useful Links
-
-- [GitHub Actions Documentation](https://docs.github.com/en/actions)
-- [Graphite Documentation](https://graphite.dev/docs)
-- [Act (Local Testing)](https://github.com/nektos/act)
-
-## Changelog
-
-See [CHANGELOG.md](../CHANGELOG.md) for version history and migration notes.
+- [GitHub Issues](https://github.com/outfitter-dev/actions/issues)
+- [Discussions](https://github.com/outfitter-dev/actions/discussions)
 
 ## License
 
-MIT © [Outfitter](https://github.com/outfitter-dev)
+MIT - See [LICENSE](../LICENSE) for details.
+
+## Versioning and Tags
+
+- Use `@alpha` for the latest pre-release builds while we iterate toward v1.
+- Use `@latest` for the most recent stable release (updated on GitHub Releases).
+- Use major tags like `@v1` once a stable v1 is cut.
+
+Tag management is automated via `.github/workflows/versioning.yml`:
+
+- Push to `main` moves the `alpha` tag to the latest commit.
+- Publishing a GitHub Release moves `latest` and the major tag (e.g., `v1`) to the release.
+- Run the workflow manually to move custom tag aliases.

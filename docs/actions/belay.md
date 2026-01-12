@@ -55,7 +55,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
@@ -68,7 +68,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets:
       GRAPHITE_CI_OPTIMIZER_TOKEN: ${{ secrets.GRAPHITE_CI_OPTIMIZER_TOKEN }}
 ```
@@ -82,7 +82,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets:
       GRAPHITE_CI_OPTIMIZER_TOKEN: ${{ secrets.GRAPHITE_CI_OPTIMIZER_TOKEN }}
       CI_STICKY_COMMENTS: true
@@ -100,32 +100,63 @@ By default, Belay requires no configuration. It will:
 3. Choose CI intensity based on risk
 4. Run checks and report results
 
-### Optional: `.ci.json`
+### Optional Config
 
-For advanced customization, create `.ci.json` in your repository root:
+Belay supports:
+- `.ci.toml` (preferred file format)
+- `.ci.yaml` / `.ci.yml`
+- Inline YAML input via `with.config`
 
-```json
-{
-  "force": "full",
-  "timeout_minutes": 30,
-  "ignore": ["**/*.md", "docs/**"],
-  "critical_globs": [
-    "packages/**/package.json",
-    "**/schema.*",
-    ".github/**"
-  ],
-  "outputs": {
-    "comment": true,
-    "webhook": false
-  }
-}
+Example `.ci.toml`:
+
+```toml
+# Belay CI configuration
+force = "full"              # "full" | "essential" | "minimal"
+timeout_minutes = 30
+
+ignore = ["**/*.md", "docs/**"]
+
+critical_globs = [
+  "packages/**/package.json",
+  "**/schema.*",
+  ".github/**",
+]
+
+[outputs]
+comment = true
+webhook = false
 ```
+
+Inline YAML example in your workflow:
+
+```yaml
+name: CI
+on: [pull_request, merge_group]
+jobs:
+  ci:
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
+    secrets: inherit
+    with:
+      config: |
+        force: essential
+        timeout_minutes: 45
+        ignore:
+          - "**/*.md"
+          - "docs/**"
+        critical_globs:
+          - "packages/**/package.json"
+        outputs:
+          comment: true
+          webhook: false
+```
+
+Precedence: inline `with.config` > `.ci.toml` > `.ci.yaml` / `.ci.yml`.
 
 #### Configuration Options
 
 | Field | Type | Description | Default |
 |-------|------|-------------|---------|
-| `force` | `"full" \| "essential" \| "minimal"` | Override automatic tier selection | Auto-detected |
+| `force` | `"full" | "essential" | "minimal"` | Override automatic tier selection | Auto-detected |
 | `timeout_minutes` | `number` | Maximum time for CI run | 30 |
 | `ignore` | `string[]` | Glob patterns to ignore in risk assessment | `[]` |
 | `critical_globs` | `string[]` | Files that always trigger full CI | See defaults below |
@@ -357,12 +388,10 @@ View detection job output:
 
 ### Force Specific Tier
 
-In `.ci.json`:
+In `.ci.toml`:
 
-```json
-{
-  "force": "full"
-}
+```toml
+force = "full"
 ```
 
 ## Examples
@@ -375,7 +404,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
@@ -393,7 +422,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
@@ -412,7 +441,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
@@ -430,18 +459,16 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
-```json
-// .ci.json (optional)
-{
-  "critical_globs": [
-    "packages/core/**",
-    "packages/api/schema.ts"
-  ]
-}
+```toml
+# .ci.toml (optional)
+critical_globs = [
+  "packages/core/**",
+  "packages/api/schema.ts",
+]
 ```
 
 ## Migration Guide
@@ -470,7 +497,7 @@ name: CI
 on: [pull_request, merge_group]
 jobs:
   ci:
-    uses: outfitter-dev/actions/.github/workflows/belay.yml@v1
+    uses: outfitter-dev/actions/.github/workflows/belay.yml@alpha
     secrets: inherit
 ```
 
@@ -510,7 +537,7 @@ Rename to standard names for auto-detection:
 
 1. Add scripts to package.json
 2. Create Makefile with targets
-3. Use `.ci.json` to override
+3. Use `.ci.toml` to override
 
 ### Problem: Wrong Tier Selected
 
@@ -520,7 +547,7 @@ Rename to standard names for auto-detection:
 
 1. Check risk factors in job summary
 2. Review critical path configuration
-3. Use `force` in `.ci.json` if needed
+3. Use `force` in `.ci.toml` if needed
 
 ### Problem: Tests Timeout
 
@@ -528,7 +555,7 @@ Rename to standard names for auto-detection:
 
 **Solution:**
 
-1. Increase timeout in `.ci.json`
+1. Increase timeout in `.ci.toml`
 2. Split large test suites
 3. Check for hanging tests
 
@@ -603,7 +630,7 @@ A: Yes, provide `NPM_TOKEN` as a secret.
 A: Yes, but ensure required tools are installed.
 
 **Q: Can I run Belay locally?**
-A: Use `act` for local testing. See examples/belay.
+A: Use `act` for local testing. See `apps/sandbox` for a minimal example.
 
 **Q: How do I disable Belay temporarily?**
 A: Add `[skip ci]` to commit message or close PR.
